@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import filedialog
 from threading import Thread
 from screeninfo import get_monitors
+import cv2
 
 # Глобальное событие для управления выполнением программы
 running_event = threading.Event()
@@ -31,11 +32,17 @@ def create_directory(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
-def draw_cross_on_screenshot(screenshot, cursor_position, line_length=20, color='red'):
+def draw_cross_on_screenshot(screenshot, cursor_position, line_length=20, color='black', outline='white'):
     draw = ImageDraw.Draw(screenshot)
     x, y = cursor_position
-    draw.line((x - line_length, y, x + line_length, y), fill=color, width=3)
-    draw.line((x, y - line_length, x, y + line_length), fill=color, width=3)
+    # Рисуем обводку белым цветом
+    outline_width = 6  # ширина обводки
+    draw.line((x - line_length, y, x + line_length, y), fill=outline, width=outline_width)
+    draw.line((x, y - line_length, x, y + line_length), fill=outline, width=outline_width)
+    # Рисуем основные линии черного цвета
+    line_width = 3  # ширина основных линий
+    draw.line((x - line_length, y, x + line_length, y), fill=color, width=line_width)
+    draw.line((x, y - line_length, x, y + line_length), fill=color, width=line_width)
     return screenshot
 
 def write_data_to_file(filepath, data):
@@ -113,51 +120,50 @@ def collect_cursor_data(screenshot_dir, coordinates_dir, running_event):
 
         mx, my, mwidth, mheight = monitor
         global_x, global_y = convert_to_global_coordinates(x, y, mx, my)
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S%f')
+        timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
 
         # Сохраняем полный скриншот в папку 'full'
         full_size_dir = os.path.join(screenshot_dir, "full")
         create_directory(full_size_dir)
-        full_screenshot_filename = os.path.join(full_size_dir, f"screenshot_{timestamp}.png")
+        full_screenshot_filename = os.path.join(full_size_dir, f"{timestamp}.png")
         full_screenshot = ImageGrab.grab(bbox=(mx, my, mx + mwidth, my + mheight))
         full_screenshot_with_cross = draw_cross_on_screenshot(full_screenshot, (global_x, global_y))
         full_screenshot_with_cross.save(full_screenshot_filename)
 
-            # Создаем скриншот размером 1000x1000, если курсор находится в пределах допустимой области
-        # Создаем и сохраняем скриншот размером 1000x1000.
-        size = 1000
-        half_size = size // 2
-        left = max(global_x - half_size, mx)
-        top = max(global_y - half_size, my)
-        right = min(global_x + half_size, mx + mwidth)
-        bottom = min(global_y + half_size, my + mheight)
+        # Создаем скриншоты разных размеров
+        for size in [1000, 500, 200]:
+            half_size = size // 2
+            left = max(global_x - half_size, mx)
+            top = max(global_y - half_size, my)
+            right = min(global_x + half_size, mx + mwidth)
+            bottom = min(global_y + half_size, my + mheight)
 
-        # Если область захвата выходит за пределы экрана, корректируем ее
-        if right - left < size:
-            if left == mx:
-                right = left + size
-            else:
-                left = right - size
-        if bottom - top < size:
-            if top == my:
-                bottom = top + size
-            else:
-                top = bottom - size
+            # Корректируем область захвата, если она выходит за пределы экрана
+            if right - left < size:
+                if left == mx:
+                    right = left + size
+                else:
+                    left = right - size
+            if bottom - top < size:
+                if top == my:
+                    bottom = top + size
+                else:
+                    top = bottom - size
 
-        bbox = (left, top, right, bottom)
-        screenshot = ImageGrab.grab(bbox)
-        screenshot_with_cross = draw_cross_on_screenshot(screenshot, (global_x - left, global_y - top))
+            bbox = (left, top, right, bottom)
+            screenshot = ImageGrab.grab(bbox)
+            screenshot_with_cross = draw_cross_on_screenshot(screenshot, (global_x - left, global_y - top))
 
-        # Здесь мы сохраняем скриншот размером 1000x1000
-        size_dir = os.path.join(screenshot_dir, f"{size}x{size}")
-        create_directory(size_dir)
-        screenshot_filename = os.path.join(size_dir, f"screenshot_{size}_{timestamp}.png")
-        screenshot_with_cross.save(screenshot_filename)
-
+            # Сохраняем скриншот заданного размера
+            size_dir = os.path.join(screenshot_dir, f"{size}x{size}")
+            create_directory(size_dir)
+            screenshot_filename = os.path.join(size_dir, f"{timestamp}.png")
+            screenshot_with_cross.save(screenshot_filename)
+            
         # Формируем список из состояний кнопок и записываем данные в файл в папке coordinates
         buttons_list = [buttons_state['Button.left'], buttons_state['Button.right'], buttons_state['Button.middle']]
-        info = f"Coordinates: {global_x},{global_y}\nTime: {timestamp}\nClick: {buttons_list}\n"
-        coordinates_filename = os.path.join(coordinates_dir, f"coordinates_{timestamp}.txt")
+        info = f"{global_x},{global_y}\n{timestamp}\n{buttons_list}\n"
+        coordinates_filename = os.path.join(coordinates_dir, f"{timestamp}.txt")
         write_data_to_file(coordinates_filename, info)
 
         screenshot_count += 1
@@ -198,6 +204,86 @@ def save_output_dir(output_dir):
     config_file = 'config.txt'
     with open(config_file, 'w') as file:
         file.write(output_dir)
+
+def process_files_in_directory():
+    # Интегрированная логика загрузки пути из файла конфигурации
+    config_file = 'config.txt'
+    if os.path.exists(config_file):
+        with open(config_file, 'r') as file:
+            output_dir = file.read().strip()
+    else:
+        output_dir = "C:\\path_to_output"
+
+    print(f"Обработка файлов в потоке: {threading.current_thread().name}")
+    processed_files = set()  # Множество для хранения уже обработанных файлов
+
+    # Пути к папкам с скриншотами
+    dirs = {
+        'full': os.path.join(output_dir, 'screenshots/full'),
+        '1000x1000': os.path.join(output_dir, 'screenshots/1000x1000'),
+        '500x500': os.path.join(output_dir, 'screenshots/500x500'),
+        '200x200': os.path.join(output_dir, 'screenshots/200x200')
+    }
+
+    # Путь к папке для сохранения результата
+    data_output_dir = os.path.join(output_dir, 'screenshots/data')
+    if not os.path.exists(data_output_dir):
+        os.makedirs(data_output_dir)
+
+    try:
+        while True:
+            # Перебираем файлы в папке с самыми маленькими скриншотами
+            for filename in os.listdir(dirs['200x200']):
+                if filename not in processed_files:
+                    try:
+                        # Загружаем скриншот 200x200
+                        img_200_path = os.path.join(dirs['200x200'], filename)
+                        img_200 = Image.open(img_200_path)
+
+                        # Загружаем и масштабируем скриншот 500x500 до 200x200
+                        img_500_path = os.path.join(dirs['500x500'], filename)
+                        img_500 = Image.open(img_500_path).resize(img_200.size)
+
+                        # Загружаем и масштабируем скриншот 1000x1000 до 200x200
+                        img_1000_path = os.path.join(dirs['1000x1000'], filename)
+                        img_1000 = Image.open(img_1000_path).resize(img_200.size)
+
+                        # Загружаем и масштабируем скриншот full до 400x200
+                        img_full_path = os.path.join(dirs['full'], filename)
+                        img_full = Image.open(img_full_path).resize((400, 200))
+
+                        # Соединяем изображения горизонтально
+                        combined_img = Image.new('RGB', (img_200.width * 3 + 400, img_200.height))
+                        combined_img.paste(img_200, (0, 0))
+                        combined_img.paste(img_500, (img_200.width, 0))
+                        combined_img.paste(img_1000, (img_200.width * 2, 0))
+                        combined_img.paste(img_full, (img_200.width * 3, 0))
+
+                         # Преобразуем в градации серого
+                        combined_img = combined_img.convert('L')
+
+                        # Сохраняем результат
+                        combined_img.save(os.path.join(data_output_dir, filename))
+                        print(f"Обработан и сохранен файл: {filename}")
+
+                        # Добавляем файл в множество обработанных файлов
+                        processed_files.add(filename)
+
+                        # Удаляем исходные файлы
+                        for dir_path in dirs.values():
+                            file_path = os.path.join(dir_path, filename)
+                            if os.path.exists(file_path):
+                                os.remove(file_path)
+
+                    except Exception as e:
+                        print(f"Ошибка при обработке файла {filename}: {e}")
+
+            # Пауза перед следующей итерацией цикла
+            time.sleep(1)
+    except KeyboardInterrupt:
+        # Обработка прерывания программы (например, нажатия Ctrl+C)
+        print("Обработка файлов остановлена.")
+
 
 def run_gui():
     root = tk.Tk()
@@ -261,6 +347,18 @@ def run_gui():
     # Запускаем главный цикл обработки событий
     root.mainloop()
 
+
+
 if __name__ == "__main__":
+    # Загружаем сохраненный путь из файла конфигурации
     output_dir = load_output_dir()
+    
+    # Создаем и запускаем поток для функции process_files_in_directory
+    thread = threading.Thread(target=process_files_in_directory)
+    thread.start()
+    
+    # Запускаем GUI в основном потоке
     run_gui()
+    
+    # Дожидаемся завершения потока перед выходом из программы
+    thread.join()
