@@ -31,11 +31,17 @@ def create_directory(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
-def draw_cross_on_screenshot(screenshot, cursor_position, line_length=20, color='red'):
+def draw_cross_on_screenshot(screenshot, cursor_position, line_length=20, color='black', outline='white'):
     draw = ImageDraw.Draw(screenshot)
     x, y = cursor_position
-    draw.line((x - line_length, y, x + line_length, y), fill=color, width=3)
-    draw.line((x, y - line_length, x, y + line_length), fill=color, width=3)
+    # Рисуем обводку белым цветом
+    outline_width = 6  # ширина обводки
+    draw.line((x - line_length, y, x + line_length, y), fill=outline, width=outline_width)
+    draw.line((x, y - line_length, x, y + line_length), fill=outline, width=outline_width)
+    # Рисуем основные линии черного цвета
+    line_width = 3  # ширина основных линий
+    draw.line((x - line_length, y, x + line_length, y), fill=color, width=line_width)
+    draw.line((x, y - line_length, x, y + line_length), fill=color, width=line_width)
     return screenshot
 
 def write_data_to_file(filepath, data):
@@ -113,51 +119,50 @@ def collect_cursor_data(screenshot_dir, coordinates_dir, running_event):
 
         mx, my, mwidth, mheight = monitor
         global_x, global_y = convert_to_global_coordinates(x, y, mx, my)
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S%f')
+        timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
 
         # Сохраняем полный скриншот в папку 'full'
         full_size_dir = os.path.join(screenshot_dir, "full")
         create_directory(full_size_dir)
-        full_screenshot_filename = os.path.join(full_size_dir, f"screenshot_{timestamp}.png")
+        full_screenshot_filename = os.path.join(full_size_dir, f"{timestamp}.png")
         full_screenshot = ImageGrab.grab(bbox=(mx, my, mx + mwidth, my + mheight))
         full_screenshot_with_cross = draw_cross_on_screenshot(full_screenshot, (global_x, global_y))
         full_screenshot_with_cross.save(full_screenshot_filename)
 
-            # Создаем скриншот размером 1000x1000, если курсор находится в пределах допустимой области
-        # Создаем и сохраняем скриншот размером 1000x1000.
-        size = 1000
-        half_size = size // 2
-        left = max(global_x - half_size, mx)
-        top = max(global_y - half_size, my)
-        right = min(global_x + half_size, mx + mwidth)
-        bottom = min(global_y + half_size, my + mheight)
+        # Создаем скриншоты разных размеров
+        for size in [1000, 500, 200]:
+            half_size = size // 2
+            left = max(global_x - half_size, mx)
+            top = max(global_y - half_size, my)
+            right = min(global_x + half_size, mx + mwidth)
+            bottom = min(global_y + half_size, my + mheight)
 
-        # Если область захвата выходит за пределы экрана, корректируем ее
-        if right - left < size:
-            if left == mx:
-                right = left + size
-            else:
-                left = right - size
-        if bottom - top < size:
-            if top == my:
-                bottom = top + size
-            else:
-                top = bottom - size
+            # Корректируем область захвата, если она выходит за пределы экрана
+            if right - left < size:
+                if left == mx:
+                    right = left + size
+                else:
+                    left = right - size
+            if bottom - top < size:
+                if top == my:
+                    bottom = top + size
+                else:
+                    top = bottom - size
 
-        bbox = (left, top, right, bottom)
-        screenshot = ImageGrab.grab(bbox)
-        screenshot_with_cross = draw_cross_on_screenshot(screenshot, (global_x - left, global_y - top))
+            bbox = (left, top, right, bottom)
+            screenshot = ImageGrab.grab(bbox)
+            screenshot_with_cross = draw_cross_on_screenshot(screenshot, (global_x - left, global_y - top))
 
-        # Здесь мы сохраняем скриншот размером 1000x1000
-        size_dir = os.path.join(screenshot_dir, f"{size}x{size}")
-        create_directory(size_dir)
-        screenshot_filename = os.path.join(size_dir, f"screenshot_{size}_{timestamp}.png")
-        screenshot_with_cross.save(screenshot_filename)
-
+            # Сохраняем скриншот заданного размера
+            size_dir = os.path.join(screenshot_dir, f"{size}x{size}")
+            create_directory(size_dir)
+            screenshot_filename = os.path.join(size_dir, f"{timestamp}.png")
+            screenshot_with_cross.save(screenshot_filename)
+            
         # Формируем список из состояний кнопок и записываем данные в файл в папке coordinates
         buttons_list = [buttons_state['Button.left'], buttons_state['Button.right'], buttons_state['Button.middle']]
-        info = f"Coordinates: {global_x},{global_y}\nTime: {timestamp}\nClick: {buttons_list}\n"
-        coordinates_filename = os.path.join(coordinates_dir, f"coordinates_{timestamp}.txt")
+        info = f"{global_x},{global_y}\n{timestamp}\n{buttons_list}\n"
+        coordinates_filename = os.path.join(coordinates_dir, f"{timestamp}.txt")
         write_data_to_file(coordinates_filename, info)
 
         screenshot_count += 1
