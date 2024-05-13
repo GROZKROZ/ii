@@ -226,6 +226,7 @@ def process_files_in_directory():
     }
 
     # Путь к папке для сохранения результата
+    coordinates_dir = os.path.join(output_dir, 'coordinates')
     data_output_dir = os.path.join(output_dir, 'screenshots/data')
     if not os.path.exists(data_output_dir):
         os.makedirs(data_output_dir)
@@ -275,6 +276,28 @@ def process_files_in_directory():
                             if os.path.exists(file_path):
                                 os.remove(file_path)
 
+                                            # Обработка соответствующего текстового файла
+                        text_file_path = os.path.join(coordinates_dir, filename.replace('.png', '.txt'))
+                        if os.path.exists(text_file_path):
+                            with open(text_file_path, 'r') as file:
+                                lines = file.readlines()
+                            
+                            # Изменение содержимого файла
+                            coordinates = lines[0].replace(',', '').zfill(8)
+                            timestamp = lines[1].strip()
+                            clicks = lines[2].replace('[', '').replace(']', '').replace(', ', '').strip()
+
+                            # Формирование новой строки
+                            new_content = f"{coordinates}{timestamp}{clicks}"
+
+                            # Преобразование каждой цифры и сохранение в numpy массив
+                            decimal_array = np.array([float(f"0.{char}") for char in new_content])
+
+                            # Сохранение numpy массива
+                            np.save(os.path.join(data_output_dir, filename.replace('.png', '')), decimal_array)
+
+                        processed_files.add(filename)
+                        
                     except Exception as e:
                         print(f"Ошибка при обработке файла {filename}: {e}")
 
@@ -356,7 +379,7 @@ if __name__ == "__main__":
     # Создаем и запускаем поток для функции process_files_in_directory
     thread = threading.Thread(target=process_files_in_directory)
     thread.start()
-    
+
     # Запускаем GUI в основном потоке
     run_gui()
     
