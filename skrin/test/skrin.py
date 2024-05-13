@@ -379,7 +379,7 @@ if __name__ == "__main__":
     # Создаем и запускаем поток для функции process_files_in_directory
     thread = threading.Thread(target=process_files_in_directory)
     thread.start()
-    
+
     # Запускаем GUI в основном потоке
     run_gui()
     
